@@ -1,21 +1,30 @@
 [project]
-name = "p11-implement-a-data-processing-workflow-in-a-cloud-based-big-data-environment-"
+name = "implement-a-data-processing-workflow"
 version = "0.1.0"
 description = "Big Data project using PySpark and Tensorflow"
 authors = [
     {name = "Laetitia Ikusawa",email = "laetdi@gmail.com"}
 ]
 readme = "README.md"
-requires-python = ">=3.10,<3.11"
+requires-python = ">=3.11,<3.12"
 dependencies = [
-    "tensorflow-macos (==2.13.0)",
-    "tensorflow-metal (>=1.2.0,<2.0.0)",
-    "pyspark (==3.5.3)"
+    "pyspark (==3.5.3)",
+    "pandas (==2.2.3)",
+    "numpy (==1.26.4)",
+    "typing-extensions (>=4.6.1)",
+    "pillow (>=12.1.1,<13.0.0)",
+    "tensorflow (>=2.21.0,<3.0.0)"
 ]
 
 [tool.poetry]
-packages = [{include = "p11_implement_a_data_processing_workflow_in_a_cloud_based_big_data_environment"}]
+package-mode = false
+packages = [{include = "implement-a-data-processing-workflow"}]
 
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]
-build-backend = "poetry.core.masonry.api"
+
+[dependency-groups]
+dev = [
+    "ipykernel (>=7.2.0,<8.0.0)",
+    "jupyter (>=1.1.1,<2.0.0)"
+]
