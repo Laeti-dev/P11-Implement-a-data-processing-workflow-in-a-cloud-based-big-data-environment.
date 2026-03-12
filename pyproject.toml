@@ -13,7 +13,9 @@ dependencies = [
     "numpy (==1.26.4)",
     "typing-extensions (>=4.6.1)",
     "pillow (>=12.1.1,<13.0.0)",
-    "tensorflow (>=2.21.0,<3.0.0)"
+    "tensorflow (>=2.21.0,<3.0.0)",
+    "kaggle (>=1.6.0,<2.0.0)",
+    "dotenv (>=0.9.9,<0.10.0)"
 ]
 
 [tool.poetry]
