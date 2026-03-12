@@ -35,30 +35,130 @@ OpenClassrooms • [Ai Engineer track](https://openclassrooms.com/fr/paths/795-a
 ***
 ## Installation
 
-This project uses **Poetry** to manage Python dependencies and a **Docker container** to provide the runtime environment (Java + Spark + PySpark).
-You can edit notebooks locally in your IDE, but all heavy computations (PySpark, Java) run inside the container.
+This project uses **Poetry** for Python dependencies and **Docker** for the runtime (Java + Spark + PySpark). You can edit notebooks in your IDE; execution runs inside the container.
 
-### 1. Prerequisites
+Follow the steps below in order. You do **not** need to install Java or Spark on your host.
 
-- **Docker** installed and running on your machine.
-- **Poetry** installed globally on your host (for local development and lockfile management).
-- This repository cloned locally:
+---
+
+### Step 1 — Prerequisites
+
+- **Docker** installed and running ([Get Docker](https://docs.docker.com/get-docker/)).
+- **Poetry** installed on your machine ([Install Poetry](https://python-poetry.org/docs/#installation)) — used for dependency management and lockfile.
+- This repository cloned:
 
 ```bash
 git clone <REPO_URL>
 cd P11-Implement-a-data-processing-workflow-in-a-cloud-based-big-data-environment
 ```
 
-You do **not** need to install Java or Spark directly on your host; they are provided by the Docker image.
+---
 
-### 2. Dependency management with Poetry (host side)
+### Step 2 — Set up Kaggle (required for the dataset download cell)
 
-Poetry is used to:
+The notebook downloads the [Fruits dataset](https://www.kaggle.com/datasets/moltean/fruits) from Kaggle. To make that work from inside the container, you need to provide your Kaggle API credentials via a `.env` file.
 
-- define dependencies in `pyproject.toml`
-- lock exact versions in `poetry.lock`
+1. **Create a Kaggle account** (if you don't have one): [kaggle.com](https://www.kaggle.com/).
 
-On your host (outside Docker), you can update or inspect dependencies with commands such as:
+2. **Get your API key**:
+   - Log in to Kaggle → click your profile picture (top right) → **Settings**.
+   - In **API**, click **Create New Token**. This downloads a `kaggle.json` file containing `username` and `key`.
+
+3. **Create a `.env` file** in the **project root** (same folder as `Dockerfile` and `README.md`). Do **not** commit this file (it is listed in `.gitignore`).
+
+   Create `.env` with exactly these two lines (replace with your own values):
+
+   ```bash
+   KAGGLE_USERNAME=your_kaggle_username
+   KAGGLE_TOKEN=your_kaggle_api_key
+   ```
+
+   - `KAGGLE_USERNAME`: the `username` value from `kaggle.json`.
+   - `KAGGLE_TOKEN`: the `key` value from `kaggle.json`.
+
+4. **Why this works**: When you start the container with `--env-file .env` (Step 4), these variables are available inside the container. The notebook cell then writes a `kaggle.json` from them and runs `kaggle datasets download` to fetch the fruits dataset into `/app/data/fruits`. No need to copy `kaggle.json` into the repo or into the image.
+
+---
+
+### Step 3 — Build the Docker image
+
+From the project root:
+
+```bash
+docker build -t pyspark-env .
+```
+
+The image includes Python, Java, Apache Spark, and the project's Poetry dependencies (PySpark, Jupyter, etc.).
+
+---
+
+### Step 4 — Start the container and Jupyter
+
+Run the container and mount the project. **Use `--env-file .env`** so Kaggle credentials are available (see Step 2):
+
+```bash
+docker run --rm -it \
+  -p 8888:8888 \
+  --env-file .env \
+  -e KAGGLE_CONFIG_DIR=/app/.kaggle \
+  -v "$PWD":/app \
+  -w /app \
+  pyspark-env /bin/bash
+```
+
+- `--env-file .env` — loads `KAGGLE_USERNAME` and `KAGGLE_TOKEN` (and any other vars in `.env`) into the container.
+- `-e KAGGLE_CONFIG_DIR=/app/.kaggle` — tells the Kaggle CLI where to write `kaggle.json` inside the container.
+- `-v "$PWD":/app` — mounts the current project directory as `/app` in the container.
+- `-w /app` — working directory inside the container is `/app`.
+
+Inside the container, start Jupyter:
+
+```bash
+cd /app
+poetry run jupyter lab --ip=0.0.0.0 --no-browser --allow-root
+```
+
+Jupyter will print URLs like:
+
+```text
+http://127.0.0.1:8888/lab?token=XXXXXXXXXXXXXXXXXXXXXXXXXXXX
+```
+
+- **Server URL**: `http://127.0.0.1:8888/` (or `http://localhost:8888/`)
+- **Token**: the string after `token=` in the URL.
+
+---
+
+### Step 5 — Run the notebook (including the Kaggle download cell)
+
+1. Open `notebooks/notebook2026.ipynb` in your browser (Jupyter Lab) or in your editor (see Step 6).
+2. Run the cells in order. The **Configuration** section defines `PROJECT_ROOT` and paths; run it before the Kaggle cell.
+3. The cell that loads `.env`, sets `KAGGLE_USERNAME` / `KAGGLE_TOKEN`, creates `kaggle.json`, and runs `!kaggle datasets download -d moltean/fruits -p /app/data/fruits --unzip` will work as long as you created `.env` (Step 2) and started the container with `--env-file .env` (Step 4).
+
+If you see an error about missing `KAGGLE_USERNAME` or `KAGGLE_TOKEN`, check that `.env` exists in the project root and that you launched the container with `--env-file .env`.
+
+---
+
+### Step 6 — (Optional) Use the container kernel from your editor
+
+You can edit notebooks in Cursor/VS Code and run them against the Jupyter server inside the container.
+
+1. Start the container and Jupyter as in Step 4.
+2. In your editor, open the notebook (e.g. `notebooks/notebook2026.ipynb`).
+3. Open the **kernel / interpreter selector** (e.g. “Select Kernel”).
+4. Choose **“Existing Jupyter Server”** or **“Connect to Jupyter Server”**.
+5. Enter:
+   - **Server URL**: `http://127.0.0.1:8888/` (or `http://localhost:8888/`)
+   - **Token**: the token printed by Jupyter in the container.
+6. Select the Python kernel from the container.
+
+Editing is done locally; execution runs inside the container. If you restart the container, reconnect with the new token.
+
+---
+
+### Dependency management (Poetry, host side)
+
+Dependencies are defined in `pyproject.toml` and locked in `poetry.lock`. The Docker build installs from the lockfile. On your host you can run:
 
 ```bash
 poetry lock        # regenerate the lockfile if needed
@@ -66,70 +166,4 @@ poetry add <pkg>   # add a new dependency
 poetry update      # update dependencies
 ```
 
-The container build process installs the dependencies listed in `poetry.lock` so that the runtime inside Docker matches the project specification.
-
-### 3. Building the Docker image (runtime with Java + Spark)
-
-From the project root (where the `Dockerfile` and `pyproject.toml` live), build the image:
-
-```bash
-docker build -t pyspark-env .
-```
-
-This image:
-
-- starts from a slim Python base image,
-- installs Java (via the system package manager),
-- downloads and configures Apache Spark,
-- installs all Python dependencies with Poetry (including PySpark and notebook tooling).
-
-### 4. Starting the container and Jupyter server
-
-Run an interactive container and mount the project directory:
-
-```bash
-docker run --rm -it -p 8888:8888 -v "$PWD":/app pyspark-env /bin/bash
-```
-
-Inside the container:
-
-```bash
-cd /app
-poetry run jupyter lab --ip=0.0.0.0 --no-browser --allow-root
-```
-
-Jupyter will start and print URLs similar to:
-
-```text
-http://e05ee06d2728:8888/lab?token=XXXXXXXXXXXXXXXXXXXXXXXXXXXX
-http://127.0.0.1:8888/lab?token=XXXXXXXXXXXXXXXXXXXXXXXXXXXX
-```
-
-The **server URL** is typically:
-
-```text
-http://127.0.0.1:8888/
-```
-
-and the **token** is the value after `token=` in the URL.
-
-### 5. Working from your text editor (Cursor/VS Code) using the container kernel
-
-You can keep editing notebooks locally in your editor and execute them using the Jupyter kernel running inside the container.
-
-1. **Start the container and Jupyter** as described above.
-2. **In your editor**, open the notebook you want to run (for example `notebooks/notebook2026.ipynb`).
-3. Open the **kernel / interpreter selector** (e.g. “Select Kernel” or similar).
-4. Choose **“Existing Jupyter Server”** or **“Connect to Jupyter Server”**.
-5. When prompted:
-   - **Server URL**: `http://127.0.0.1:8888/` (or `http://localhost:8888/`)
-   - **Token**: paste the token printed by Jupyter in the container logs.
-6. Confirm the connection. Your editor should now list the kernels exposed by the container.
-7. Select the Python kernel associated with this project (created by Poetry inside the container).
-
-From this point on:
-
-- **Editing** happens locally in your IDE (on your host filesystem, mounted as `/app` in the container).
-- **Execution** of notebook cells happens **inside the Docker container**, using the configured Java + PySpark environment.
-
-If you restart the container, a new token will be generated. Reconnect your editor using the new server URL/token pair.
+Rebuild the Docker image after changing dependencies so the container stays in sync.
