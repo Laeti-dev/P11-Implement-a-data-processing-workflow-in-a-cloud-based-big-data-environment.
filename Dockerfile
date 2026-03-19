@@ -1,18 +1,24 @@
-FROM python:3.11-slim
+FROM python:3.11-slim-bookworm
 
 # Install Java
-RUN apt-get update && apt-get install -y default-jdk curl && \
+RUN apt-get update && apt-get install -y openjdk-17-jdk curl && \
   apt-get clean && rm -rf /var/lib/apt/lists/*
 
-ENV JAVA_HOME=/usr/lib/jvm/default-java
+# Set the Java home directory
+ENV JAVA_HOME=/usr/lib/jvm/java-17-openjdk-arm64
+# Add Java to the PATH
 ENV PATH="$JAVA_HOME/bin:$PATH"
 
 # Install Spark (simplified example, version to adjust)
 ENV SPARK_VERSION=3.5.3
+# Set the Hadoop version
 ENV HADOOP_VERSION=3
+# Download and extract Spark
 RUN curl -L "https://archive.apache.org/dist/spark/spark-${SPARK_VERSION}/spark-${SPARK_VERSION}-bin-hadoop${HADOOP_VERSION}.tgz" \
   | tar -xz -C /opt
+# Set the Spark home directory
 ENV SPARK_HOME=/opt/spark-${SPARK_VERSION}-bin-hadoop${HADOOP_VERSION}
+# Add Spark to the PATH
 ENV PATH="$SPARK_HOME/bin:$PATH"
 
 # Install Python deps
