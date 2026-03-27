@@ -1,4 +1,4 @@
-## Apprentissage techniques du projet
+# Apprentissage techniques du projet
 
 Ce document regroupe les points techniques importants appris au fil du projet, afin de garder une trace exploitable pour de futurs travaux (maintenance, extension de l’architecture, nouveaux projets Big Data, etc.).
 
@@ -72,4 +72,38 @@ Ce document regroupe les points techniques importants appris au fil du projet, a
   - Le broadcasting ne résout pas tous les problèmes de performance : si l’inférence du modèle est très coûteuse, il faut également optimiser la logique métier (batching, réduction de la taille des features, etc.).
   - En environnement EMR ou Docker, il est crucial que la **même version du framework de deep learning** (TensorFlow, PyTorch, etc.) soit disponible sur tous les nœuds, sinon le chargement des poids ou l’exécution du code peut échouer.
   - Lors de l’évolution du modèle (nouveaux poids, nouvelle architecture), penser à versionner et documenter quelle version est utilisée dans quel job Spark.
+
+- **Cas concret du projet (`MobileNetV2`)**
+  - Le modèle est chargé une fois côté driver, puis ses poids sont récupérés avec `get_weights()`.
+  - Ces poids sont diffusés avec une variable broadcast pour éviter de recharger le modèle depuis le stockage sur chaque tâche.
+  - Dans la `pandas_udf`, chaque executor reconstruit un modèle local (`weights=None`) puis applique les poids broadcastés (`set_weights(...)`).
+  - Cette approche réduit l’I/O redondante, diminue le coût de démarrage des tasks et garantit une inférence cohérente entre partitions.
+
+### Extraction de features et scalabilité
+
+- **Définition opérationnelle**
+  - L’extraction de features consiste à transformer chaque image brute en un vecteur numérique (embedding) via un modèle pré-entraîné utilisé comme extracteur (`include_top=False`, `pooling='avg'`).
+  - Dans le projet, on passe d’images (bytes) à une colonne `features` exploitable dans Spark ML.
+
+- **Objectif métier et technique**
+  - Découpler la phase deep learning (coûteuse) des étapes ML aval (classification, clustering, analyse).
+  - Réutiliser les features calculées une seule fois, plutôt que de refaire l’inférence à chaque expérimentation.
+  - Préparer une réduction de dimension (PCA) pour alléger les traitements suivants.
+
+- **Pourquoi c’est scalable avec Spark**
+  - Les images sont distribuées en partitions ; chaque executor traite ses lots en parallèle via `pandas_udf`.
+  - Le modèle est initialisé une fois par worker (mode `SCALAR_ITER`) au lieu d’être recréé pour chaque ligne.
+  - Le broadcast des poids évite la duplication coûteuse des chargements.
+  - Le filtrage des erreurs (`features IS NOT NULL`) permet de rendre le pipeline plus robuste aux images corrompues.
+
+- **Optimisations de pipeline à retenir**
+  - **Partitionnement** : ajuster `repartition(...)` selon le volume de données et le nombre d’executors.
+  - **Cache** : conserver en mémoire les features quand elles sont réutilisées dans plusieurs actions Spark.
+  - **Persistance** : écrire en Parquet pour reprendre facilement le travail entre sessions/job runs.
+  - **Réduction de dimension** : appliquer PCA pour passer d’un embedding dense à une représentation plus compacte, réduisant coût mémoire et temps d’apprentissage.
+
+- **Points de vigilance**
+  - Le débit réel dépend surtout du ratio CPU/GPU disponible, de la taille des batches, et de la bande passante I/O.
+  - Une sur-partition peut créer beaucoup d’overhead de scheduling ; une sous-partition peut sous-utiliser le cluster.
+  - Le schéma des features (taille, type, version de modèle) doit être versionné pour garantir la reproductibilité.
 ---

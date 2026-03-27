@@ -1,7 +1,7 @@
 FROM python:3.11-slim-bookworm
 
 # Install Java
-RUN apt-get update && apt-get install -y openjdk-17-jdk curl && \
+RUN apt-get update && apt-get install -y openjdk-17-jdk curl unzip && \
   apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Set the Java home directory
@@ -20,6 +20,12 @@ RUN curl -L "https://archive.apache.org/dist/spark/spark-${SPARK_VERSION}/spark-
 ENV SPARK_HOME=/opt/spark-${SPARK_VERSION}-bin-hadoop${HADOOP_VERSION}
 # Add Spark to the PATH
 ENV PATH="$SPARK_HOME/bin:$PATH"
+
+# Install AWS CLI v2
+RUN curl "https://awscli.amazonaws.com/awscli-exe-linux-aarch64.zip" -o "awscliv2.zip" && \
+  unzip awscliv2.zip && \
+  ./aws/install && \
+  rm -rf awscliv2.zip aws
 
 # Install Python deps
 WORKDIR /app
